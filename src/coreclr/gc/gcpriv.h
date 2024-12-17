@@ -2447,7 +2447,7 @@ private:
 #endif //!USE_REGIONS || MULTIPLE_HEAPS
 
 #if defined(MULTIPLE_HEAPS) || defined(USE_REGIONS)
-    PER_HEAP_ISOLATED_METHOD bool decommit_step (uint64_t step_milliseconds);
+    PER_HEAP_ISOLATED_METHOD bool decommit_step (uint64_t step_milliseconds, size_t* decommited_size = NULL);
 #endif //MULTIPLE_HEAPS || USE_REGIONS
 
 #ifdef USE_REGIONS

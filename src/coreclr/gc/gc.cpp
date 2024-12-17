@@ -13523,6 +13523,11 @@ void gc_heap::distribute_free_regions()
         }
     }
 
+    if (num_decommit_regions_by_time != 0 || size_decommit_regions_by_time != 0)
+    {
+        printf("    [gc] moved %3zd regions (%zd MB) to decommit based on time\n", num_decommit_regions_by_time, size_decommit_regions_by_time / (1 << 20));
+    }
+
     dprintf (1, ("moved %2zd regions (%8zd) to decommit based on time", num_decommit_regions_by_time, size_decommit_regions_by_time));
 
     global_free_huge_regions.transfer_regions (&global_regions_to_decommit[huge_free_region]);
@@ -13639,6 +13644,10 @@ void gc_heap::distribute_free_regions()
                 dprintf (REGIONS_LOG, ("Moved %zd %s regions to decommit list",
                          global_regions_to_decommit[kind].get_num_free_regions(), kind_name[kind]));
 
+                printf("    [gc] moved %zd regions (%zd MB) to decommit list\n",
+                       global_regions_to_decommit[kind].get_num_free_regions(),
+                       global_regions_to_decommit[kind].get_size_free_regions() / (1 << 20));
+
                 if (kind == basic_free_region)
                 {
                     // we should now have num_regions_to_decommit[kind] regions more on the decommit list
@@ -13731,13 +13740,23 @@ void gc_heap::distribute_free_regions()
         gc_last_ephemeral_decommit_time = dd_time_clock (dd0);
         size_t decommit_step_milliseconds = min (ephemeral_elapsed, (size_t)(10*1000));
 
-        decommit_step (decommit_step_milliseconds);
+        size_t decommited_size;
+        decommit_step (decommit_step_milliseconds, &decommited_size);
+
+        if (decommited_size)
+        {
+            printf("    [gc] decommit size: %zd MB\n", decommited_size / (1 << 20));
+            printf("    [gc] decommit step milliseconds: %zd\n", decommit_step_milliseconds);
+        }
     }
     // transfer any remaining regions on the decommit list back to the free list
     for (int kind = basic_free_region; kind < count_free_region_kinds; kind++)
     {
         if (global_regions_to_decommit[kind].get_num_free_regions() != 0)
         {
+            printf("    [gc] moved %zd regions (%zd MB) from the decommit list to the list of free regions\n",
+                   global_regions_to_decommit[kind].get_num_free_regions(),
+                   global_regions_to_decommit[kind].get_size_free_regions() / (1 << 20));
             free_regions[kind].transfer_regions (&global_regions_to_decommit[kind]);
         }
     }
@@ -44724,7 +44743,7 @@ void gc_heap::decommit_ephemeral_segment_pages()
 
 #if defined(MULTIPLE_HEAPS) || defined(USE_REGIONS)
 // return true if we actually decommitted anything
-bool gc_heap::decommit_step (uint64_t step_milliseconds)
+bool gc_heap::decommit_step (uint64_t step_milliseconds, size_t* decommited_size)
 {
     if (settings.pause_mode == pause_no_gc)
     {
@@ -44747,6 +44766,8 @@ bool gc_heap::decommit_step (uint64_t step_milliseconds)
             decommit_size += size;
             if (decommit_size >= max_decommit_step_size)
             {
+                if (decommited_size)
+                    *decommited_size = decommit_size;
                 return true;
             }
         }
@@ -44767,6 +44788,8 @@ bool gc_heap::decommit_step (uint64_t step_milliseconds)
         decommit_size += hp->decommit_ephemeral_segment_pages_step ();
     }
 #endif //MULTIPLE_HEAPS
+    if (decommited_size)
+        *decommited_size = decommit_size;
     return (decommit_size != 0);
 }
 #endif //MULTIPLE_HEAPS || USE_REGIONS
